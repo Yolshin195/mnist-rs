@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuralDigit AI Laboratory</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --bg: #0b0f1a;
+            --card: #161b2c;
+            --text: #ffffff;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * { box-sizing: border-box; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b0f1a 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .app-card {
+            background: var(--card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        @media (max-width: 768px) { .app-card { grid-template-columns: 1fr; padding: 20px; } }
+
+        /* Left side: Canvas Area */
+        .drawing-section { display: flex; flex-direction: column; align-items: center; }
+
+        h1 { font-weight: 800; font-size: 24px; margin: 0 0 8px 0; letter-spacing: -0.5px; }
+        .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+
+        .canvas-container {
+            position: relative;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #334155;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            cursor: crosshair;
+            touch-action: none;
+            display: block;
+        }
+
+        .canvas-actions {
+            display: flex;
+            gap: 12px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        /* Right side: Insights & Controls */
+        .info-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .prediction-display {
+            background: rgba(255,255,255,0.03);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            border: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        #result-digit {
+            font-size: 84px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--accent);
+            text-shadow: 0 0 30px var(--accent-glow);
+            margin: 10px 0;
+        }
+
+        /* Button Styles */
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .primary-btn { background: var(--accent); color: white; box-shadow: 0 4px 14px 0 var(--accent-glow); }
+        .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px 0 var(--accent-glow); }
+
+        .secondary-btn { background: #334155; color: white; }
+        .secondary-btn:hover { background: #475569; }
+
+        /* Training Mode UI */
+        .training-box {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(16, 185, 129, 0.05);
+            border-radius: 16px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .train-input-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        input[type="number"] {
+            background: #0b0f1a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            width: 60px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .preview-28 {
+            width: 56px;
+            height: 56px;
+            background: #000;
+            border: 1px solid var(--accent);
+            image-rendering: pixelated;
+            margin: 0 auto 10px;
+            display: block;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        /* Анимация загрузки */
+        .loading { opacity: 0.5; pointer-events: none; filter: blur(2px); }
+    </style>
+</head>
+<body>
+
+    <div class="app-card" id="main-app">
+        <div class="drawing-section">
+            <div style="width: 100%;">
+                <h1>MNIST Lab v1.0</h1>
+                <p class="subtitle">Neural Network Hand-writing Recognition</p>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="mainCanvas" width="280" height="280"></canvas>
+            </div>
+
+            <div class="canvas-actions">
+                <button class="secondary-btn" onclick="clearCanvas()">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    Очистить
+                </button>
+                <button class="primary-btn" onclick="predict()">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Распознать
+                </button>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <div class="prediction-display">
+                <canvas id="previewCanvas" width="28" height="28" class="preview-28"></canvas>
+                <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Результат</div>
+                <div id="result-digit">?</div>
+                <div id="confidence" style="color: var(--success); font-weight: 600; font-size: 14px;"></div>
+            </div>
+
+            <div id="training-ui" class="training-box" style="display: none;">
+                <div style="font-size: 14px; font-weight: 600;">Дообучить модель?</div>
+                <p style="font-size: 12px; color: var(--text-dim); margin: 4px 0 12px 0;">Если ответ неверный, укажите правильный для корректировки весов весов.</p>
+                <div class="train-input-group">
+                    <input type="number" id="correct-value" min="0" max="9" value="5">
+                    <button class="primary-btn" onclick="submitTraining()" style="background: var(--success); box-shadow: none;">
+                        Обучить
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <div style="font-size: 12px; display: flex; align-items: center; color: var(--text-dim);">
+                    <span class="status-dot"></span> 
+                    Backend: Rust / Askama 0.15.4 Ready
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, { predict, train } from "./pkg/wasm_inference.js";
+
+        let wasmReady = false;
+
+        async function initWasm() {
+            await init();
+            wasmReady = true;
+            console.log("WASM loaded 🚀");
+        }
+
+        window.predictWasm = async function(data) {
+            if (!wasmReady) {
+                console.log("WASM not ready");
+                return null;
+            }
+
+            const result = predict(data);
+            return result;
+        };
+
+        window.trainWasm = async function(label, image) {
+            if (!wasmReady) {
+                console.log("WASM not ready");
+                return null;
+            }
+
+            const result = train(label, image);
+            return result;
+        };
+
+        initWasm();
+    </script>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const pCtx = previewCanvas.getContext('2d');
+        let drawing = false;
+
+        // Инициализация холста
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 22;
+        ctx.strokeStyle = 'white';
+
+        // События рисования
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+
+        function startDrawing(e) {
+            drawing = true;
+            draw(e);
+        }
+
+        function stopDrawing() {
+            drawing = false;
+            ctx.beginPath();
+            updatePreview();
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('result-digit').innerText = "?";
+            document.getElementById('confidence').innerText = "";
+            document.getElementById('training-ui').style.display = 'none';
+            updatePreview();
+        }
+
+        function updatePreview() {
+            // Рисуем уменьшенную копию для визуализации MNIST-формата
+            pCtx.fillStyle = "black";
+            pCtx.fillRect(0, 0, 28, 28);
+            pCtx.drawImage(canvas, 0, 0, 28, 28);
+        }
+
+        // Подготовка данных для MNIST (массив 784 числа)
+        function getPixelData() {
+            const imgData = pCtx.getImageData(0, 0, 28, 28);
+            const pixels = [];
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                // Берем только яркость (в MNIST 0 - черный, 255 - белый)
+                pixels.push(imgData.data[i]);
+            }
+            return pixels;
+        }
+
+        // --- ТОЧКИ ИНТЕГРАЦИИ С ВАШИМ RUST СЕРВЕРОМ ---
+
+        async function predict() {
+            const app = document.getElementById('main-app');
+            const data = getPixelData();
+            
+            app.classList.add('loading');
+
+            try {
+                
+                const result = await window.predictWasm(data);
+
+                app.classList.remove('loading');
+
+                app.classList.remove('loading');
+                const mockDigit = Math.floor(Math.random() * 10);
+                document.getElementById('result-digit').innerText = result.digit; // Используем реальный результат от сервера
+                document.getElementById('confidence').innerText = `Точность: ${result.confidence * 100}%`;
+                document.getElementById('training-ui').style.display = 'block';
+
+            } catch (err) {
+                console.error(err);
+                app.classList.remove('loading');
+            }
+        }
+
+        async function submitTraining() {
+            const data = getPixelData();
+            const correctValue = document.getElementById('correct-value').value;
+
+            console.log("Sending to Rust server for retraining...", { label: correctValue, pixels: data });
+
+            window.trainWasm(parseInt(correctValue), data)
+
+            //alert("Данные отправлены. Модель будет обновлена.");
+        }
+
+        // Начальная очистка в черный цвет
+        clearCanvas();
+    </script>
+</body>
+</html>

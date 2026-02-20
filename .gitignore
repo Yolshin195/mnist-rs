@@ -30,3 +30,5 @@ target
 /assets/mnist/*
 
 crates/wasm-inference/pkg/*
+
+.DS_Store

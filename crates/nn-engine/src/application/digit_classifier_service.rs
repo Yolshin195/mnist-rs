@@ -1,16 +1,16 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use crate::port::model_repository::ModelRepository;
-use crate::domain::error::NNError;
+use crate::NdArrayEngine;
+use crate::adapter::async_ndarray_engine::AsyncNdArrayEngine;
+use crate::adapter::file_repository::FileModelRepository;
 use crate::domain::Prediction;
 use crate::domain::TrainingStepResult;
-use crate::adapter::async_ndarray_engine::AsyncNdArrayEngine;
+use crate::domain::error::NNError;
 use crate::port::classifier::{
-    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter
+    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter,
 };
-use crate::adapter::file_repository::FileModelRepository;
-use crate::NdArrayEngine;
+use crate::port::model_repository::ModelRepository;
 
 pub struct DigitClassifierService {
     engine: AsyncNdArrayEngine,
@@ -18,10 +18,7 @@ pub struct DigitClassifierService {
 }
 
 impl DigitClassifierService {
-    pub fn new(
-        engine: AsyncNdArrayEngine,
-        repo: Arc<dyn ModelRepository + Send + Sync>,
-    ) -> Self {
+    pub fn new(engine: AsyncNdArrayEngine, repo: Arc<dyn ModelRepository + Send + Sync>) -> Self {
         Self { engine, repo }
     }
 
@@ -42,10 +39,7 @@ impl DigitClassifierService {
         let engine = AsyncNdArrayEngine::new(NdArrayEngine::new());
         let repo = Arc::new(FileModelRepository::new(path));
 
-        Self {
-            engine,
-            repo,
-        }
+        Self { engine, repo }
     }
 }
 

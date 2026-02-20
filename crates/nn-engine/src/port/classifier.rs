@@ -44,12 +44,6 @@ pub trait AsyncModelStateImporter {
 }
 
 #[async_trait]
-pub trait AsyncDigitClassifier:
-    AsyncDigitPredictor + AsyncDigitTrainer + Send + Sync
-{
-}
+pub trait AsyncDigitClassifier: AsyncDigitPredictor + AsyncDigitTrainer + Send + Sync {}
 
-impl<T> AsyncDigitClassifier for T
-where
-    T: AsyncDigitPredictor + AsyncDigitTrainer + Send + Sync,
-{}
+impl<T> AsyncDigitClassifier for T where T: AsyncDigitPredictor + AsyncDigitTrainer + Send + Sync {}

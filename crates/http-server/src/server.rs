@@ -1,9 +1,9 @@
 use crate::routes::router;
 
 use crate::state::AppState;
+use nn_engine::application::digit_classifier_service::DigitClassifierService;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use nn_engine::application::digit_classifier_service::DigitClassifierService;
 
 pub async fn run() {
     tracing_subscriber::registry()

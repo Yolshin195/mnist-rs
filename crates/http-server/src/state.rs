@@ -1,4 +1,4 @@
-use nn_engine::{port::classifier::AsyncDigitClassifier};
+use nn_engine::port::classifier::AsyncDigitClassifier;
 use std::sync::Arc;
 
 #[derive(Clone)]

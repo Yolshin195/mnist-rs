@@ -1,15 +1,15 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task;
-use async_trait::async_trait;
 
 use crate::NdArrayEngine;
 use crate::domain::TrainingStepResult;
-use crate::domain::{Prediction, error::NNError, ModelState};
+use crate::domain::{ModelState, Prediction, error::NNError};
 use crate::port::classifier::{
-    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter, DigitPredictor, DigitTrainer, ModelStateExporter, ModelStateImporter
+    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter,
+    DigitPredictor, DigitTrainer, ModelStateExporter, ModelStateImporter,
 };
-
 
 pub struct AsyncNdArrayEngine {
     inner: Arc<Mutex<NdArrayEngine>>,
@@ -22,7 +22,6 @@ impl AsyncNdArrayEngine {
         }
     }
 }
-
 
 #[async_trait]
 impl AsyncDigitPredictor for AsyncNdArrayEngine {
@@ -39,7 +38,6 @@ impl AsyncDigitPredictor for AsyncNdArrayEngine {
     }
 }
 
-
 #[async_trait]
 impl AsyncDigitTrainer for AsyncNdArrayEngine {
     async fn train(&self, label: u8, pixels: &[u8]) -> Result<TrainingStepResult, NNError> {
@@ -54,7 +52,6 @@ impl AsyncDigitTrainer for AsyncNdArrayEngine {
         .map_err(|_| NNError::InternalError)?
     }
 }
-
 
 #[async_trait]
 impl AsyncModelStateExporter for AsyncNdArrayEngine {
@@ -83,7 +80,6 @@ impl AsyncModelStateImporter for AsyncNdArrayEngine {
         .map_err(|_| NNError::InternalError)?
     }
 }
-
 
 #[cfg(test)]
 mod tests {

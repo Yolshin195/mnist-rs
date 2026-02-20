@@ -1,3 +1,4 @@
+use crate::domain::TrainMetrics;
 use crate::domain::{prediction::Prediction, error::NNError};
 use crate::port::classifier::DigitClassifier;
 use crate::domain::model_state::ModelState;
@@ -5,9 +6,10 @@ use crate::domain::model_state::ModelState;
 use async_trait::async_trait;
 use ndarray::{Array1, Array2, Axis};
 use ndarray_rand::RandomExt;
-use rand::distributions::Uniform;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use ndarray_rand::rand_distr::Normal;
+
 
 pub struct NdArrayEngine {
     w1: Arc<RwLock<Array2<f32>>>,
@@ -19,10 +21,17 @@ pub struct NdArrayEngine {
 
 impl NdArrayEngine {
     pub fn new() -> Self {
+        let he1 = (2.0f32 / 784.0).sqrt();
+        let he2 = (2.0f32 / 128.0).sqrt();
+
         Self {
-            w1: Arc::new(RwLock::new(Array2::random((128, 784), Uniform::new(-0.5, 0.5)))),
+            w1: Arc::new(RwLock::new(
+                Array2::random((128, 784), Normal::new(0.0, he1).unwrap())
+            )),
             b1: Arc::new(RwLock::new(Array1::zeros(128))),
-            w2: Arc::new(RwLock::new(Array2::random((10, 128), Uniform::new(-0.5, 0.5)))),
+            w2: Arc::new(RwLock::new(
+                Array2::random((10, 128), Normal::new(0.0, he2).unwrap())
+            )),
             b2: Arc::new(RwLock::new(Array1::zeros(10))),
             lr: 0.01,
         }
@@ -84,38 +93,13 @@ impl NdArrayEngine {
         let sum = exp.sum();
         exp / sum
     }
-}
 
-#[async_trait]
-impl DigitClassifier for NdArrayEngine {
-
-    async fn predict(&self, pixels: &[u8]) -> Result<Prediction, NNError> {
-        let input = Self::normalize(pixels)?;
-
-        let w1 = self.w1.read().await;
-        let b1 = self.b1.read().await;
-        let w2 = self.w2.read().await;
-        let b2 = self.b2.read().await;
-
-        let z1 = w1.dot(&input) + &*b1;
-        let a1 = Self::relu(&z1);
-
-        let z2 = w2.dot(&a1) + &*b2;
-        let output = Self::softmax(&z2);
-
-        let (digit, confidence) = output
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .unwrap();
-
-        Ok(Prediction {
-            digit: digit as u8,
-            confidence: *confidence,
-        })
+    fn cross_entropy(output: &Array1<f32>, label: u8) -> f32 {
+        let p = output[label as usize].max(1e-7);
+        -p.ln()
     }
 
-    async fn train(&self, label: u8, pixels: &[u8]) -> Result<(), NNError> {
+    pub async fn train_with_metrics(&self, label: u8, pixels: &[u8]) -> Result<TrainMetrics, NNError> {
         let input = Self::normalize(pixels)?;
 
         let mut w1 = self.w1.write().await;
@@ -165,6 +149,55 @@ impl DigitClassifier for NdArrayEngine {
         *w1 -= &(dw1 * self.lr);
         *b1 -= &(db1 * self.lr);
 
+
+        let loss = Self::cross_entropy(&output, label);
+
+        let predicted = output
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0 as u8;
+
+        let train_metrics = TrainMetrics {
+            loss, correct: predicted == label
+        };
+
+        Ok(train_metrics)
+    }
+}
+
+#[async_trait]
+impl DigitClassifier for NdArrayEngine {
+
+    async fn predict(&self, pixels: &[u8]) -> Result<Prediction, NNError> {
+        let input = Self::normalize(pixels)?;
+
+        let w1 = self.w1.read().await;
+        let b1 = self.b1.read().await;
+        let w2 = self.w2.read().await;
+        let b2 = self.b2.read().await;
+
+        let z1 = w1.dot(&input) + &*b1;
+        let a1 = Self::relu(&z1);
+
+        let z2 = w2.dot(&a1) + &*b2;
+        let output = Self::softmax(&z2);
+
+        let (digit, confidence) = output
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+
+        Ok(Prediction {
+            digit: digit as u8,
+            confidence: *confidence,
+        })
+    }
+
+    async fn train(&self, label: u8, pixels: &[u8]) -> Result<(), NNError> {
+        self.train_with_metrics(label, pixels).await?;
         Ok(())
     }
 }
@@ -173,6 +206,17 @@ impl DigitClassifier for NdArrayEngine {
 #[cfg(test)]
 mod tests {
     use super::*; 
+
+    #[tokio::test]
+    async fn test_train() {
+        let engine = NdArrayEngine::new();
+        let pixels = vec![255u8; 784];
+        engine.train(9, &pixels).await.unwrap();
+    }
+
+        fn sample_pixels() -> Vec<u8> {
+        vec![255u8; 784]
+    }
 
     #[tokio::test]
     async fn test_predict_runs() {
@@ -186,9 +230,62 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_train() {
+    async fn test_weights_change_after_training() {
         let engine = NdArrayEngine::new();
-        let pixels = vec![255u8; 784];
-        engine.train(9, &pixels).await.unwrap();
+        let pixels = sample_pixels();
+
+        let before = engine.export_state().await.unwrap();
+
+        engine.train(3, &pixels).await.unwrap();
+
+        let after = engine.export_state().await.unwrap();
+
+        assert_ne!(before.w1, after.w1);
+        assert_ne!(before.w2, after.w2);
+    }
+
+    #[tokio::test]
+    async fn test_loss_decreases_on_same_sample() {
+        let engine = NdArrayEngine::new();
+        let pixels = sample_pixels();
+
+        let loss1 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
+        let loss2 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
+        let loss3 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
+
+        assert!(loss3 <= loss1 || loss3 <= loss2);
+    }
+
+    #[tokio::test]
+    async fn test_model_can_overfit_single_sample() {
+        let engine = NdArrayEngine::new();
+        let pixels = sample_pixels();
+
+        for _ in 0..200 {
+            engine.train(7, &pixels).await.unwrap();
+        }
+
+        let prediction = engine.predict(&pixels).await.unwrap();
+
+        assert_eq!(prediction.digit, 7);
+        assert!(prediction.confidence > 0.8);
+    }
+
+    #[tokio::test]
+    async fn test_export_import_consistency() {
+        let engine = NdArrayEngine::new();
+        let pixels = sample_pixels();
+
+        engine.train(2, &pixels).await.unwrap();
+
+        let state = engine.export_state().await.unwrap();
+
+        let new_engine = NdArrayEngine::new();
+        new_engine.import_state(state).await.unwrap();
+
+        let p1 = engine.predict(&pixels).await.unwrap();
+        let p2 = new_engine.predict(&pixels).await.unwrap();
+
+        assert_eq!(p1.digit, p2.digit);
     }
 }

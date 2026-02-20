@@ -287,7 +287,7 @@
             const pixels = [];
             for (let i = 0; i < imgData.data.length; i += 4) {
                 // Берем только яркость (в MNIST 0 - черный, 255 - белый)
-                pixels.push(imgData.data[i + 3]); 
+                pixels.push(imgData.data[i]);
             }
             return pixels;
         }
@@ -308,8 +308,6 @@
                     body: JSON.stringify({ image: data })
                 });
                 const result = await response.json();
-
-                console.log("Received from Rust server:", result);
 
                 app.classList.remove('loading');
 

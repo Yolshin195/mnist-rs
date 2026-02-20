@@ -7,7 +7,6 @@ use tokio;
 
 use nn_engine::{
     NdArrayEngine,
-    DigitClassifier,
     ModelRepository,
     FileModelRepository,
 };
@@ -25,7 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let version = args.iter()
         .position(|a| a == "--version")
         .and_then(|i| args.get(i + 1))
-        .expect("Usage: --version <name>");
+        .map(|s| s.as_str())
+        .unwrap_or("default");
 
     let resume = args.contains(&"--resume".to_string());
 
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = NdArrayEngine::new();
     let repo = FileModelRepository::new(&model_path);
 
-    // -------- Resume logic --------
+    // -------- Resume --------
     if resume {
         println!("📂 Loading existing model...");
         let state = repo.load().await?;
@@ -73,6 +73,8 @@ async fn train_epoch(
         .has_headers(true)
         .from_reader(reader);
 
+    let mut total_loss = 0.0;
+    let mut total_correct = 0usize;
     let mut count = 0usize;
 
     for result in csv_reader.records() {
@@ -86,14 +88,31 @@ async fn train_epoch(
             .map(|v| v.parse::<u8>().unwrap())
             .collect();
 
-        engine.train(label, &pixels).await?;
+        let train_metrics=
+            engine.train_with_metrics(label, &pixels).await?;
+
+        total_loss += train_metrics.loss;
+        if train_metrics.correct {
+            total_correct += 1;
+        }
 
         count += 1;
 
         if count % 5000 == 0 {
-            println!("Trained on {} samples", count);
+            println!(
+                "Samples: {} | Avg Loss: {:.4} | Accuracy: {:.2}%",
+                count,
+                total_loss / count as f32,
+                100.0 * total_correct as f32 / count as f32
+            );
         }
     }
+
+    println!(
+        "\n📊 Epoch Result → Loss: {:.4} | Accuracy: {:.2}%",
+        total_loss / count as f32,
+        100.0 * total_correct as f32 / count as f32
+    );
 
     Ok(())
 }

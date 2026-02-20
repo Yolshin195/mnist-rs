@@ -9,3 +9,4 @@ pub use domain::error::NNError;
 pub use domain::model_state::ModelState;
 pub use adapter::file_repository::FileModelRepository;
 pub use port::model_repository::ModelRepository;
+pub use domain::TrainMetrics;

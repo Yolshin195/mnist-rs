@@ -1,3 +1,6 @@
+mod services;
+pub use services::DigitClassifierService;
+
 use async_trait::async_trait;
 // ==== DTO ====
 

@@ -2,7 +2,7 @@ use crate::routes::router;
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::state::AppState;
-use nn_engine::NdArrayEngine;
+use app::DigitClassifierService;
 use std::sync::Arc;
 
 
@@ -15,9 +15,12 @@ pub async fn run() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let classifier = Arc::new(NdArrayEngine::new());
-
-    let state = AppState { classifier };
+    let model_path = format!(
+        "{}/../../assets/models/default.bin",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let service = DigitClassifierService::new(model_path).await.expect("Error: DigitClassifierService new");
+    let state = AppState { classifier: Arc::new(service) };
 
     // build our application with some routes
     let app = router()

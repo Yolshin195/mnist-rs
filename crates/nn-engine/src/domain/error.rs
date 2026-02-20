@@ -6,6 +6,7 @@ pub enum NNError {
     IoError(String),
     SerializationError,
     PersistenceError,
+    InternalError,
 }
 
 impl fmt::Display for NNError {
@@ -15,6 +16,7 @@ impl fmt::Display for NNError {
             NNError::IoError(msg) => write!(f, "I/O error: {}", msg),
             NNError::SerializationError => write!(f, "Serialization error"),
             NNError::PersistenceError => write!(f, "Persistence error"),
+            NNError::InternalError => write!(f, "InternalError error"),
         }
     }
 }

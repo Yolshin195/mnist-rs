@@ -6,9 +6,8 @@ use csv::ReaderBuilder;
 use tokio;
 
 use nn_engine::{
-    NdArrayEngine,
-    ModelRepository,
-    FileModelRepository,
+    FileModelRepository, ModelRepository, NdArrayEngine,
+    port::classifier::{DigitTrainer, ModelStateExporter, ModelStateImporter},
 };
 
 const TRAIN_PATH: &str = "assets/mnist/mnist_train.csv";
@@ -17,11 +16,11 @@ const EPOCHS: usize = 3;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     // -------- CLI args --------
     let args: Vec<String> = env::args().collect();
 
-    let version = args.iter()
+    let version = args
+        .iter()
         .position(|a| a == "--version")
         .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str())
@@ -35,26 +34,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Training version: {}", version);
 
-    let engine = NdArrayEngine::new();
+    let mut engine = NdArrayEngine::new();
     let repo = FileModelRepository::new(&model_path);
 
     // -------- Resume --------
     if resume {
         println!("📂 Loading existing model...");
         let state = repo.load().await?;
-        engine.import_state(state).await?;
+        engine.import_state(state)?;
         println!("✅ Model loaded");
     }
 
     // -------- Training --------
     for epoch in 0..EPOCHS {
         println!("\n📚 Epoch {}/{}", epoch + 1, EPOCHS);
-        train_epoch(&engine).await?;
+        train_epoch(&mut engine).await?;
     }
 
     // -------- Save --------
     println!("\n💾 Saving model...");
-    let state = engine.export_state().await?;
+    let state = engine.export_state()?;
     repo.save(&state).await?;
 
     println!("✅ Model saved to {}", model_path);
@@ -62,16 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn train_epoch(
-    engine: &NdArrayEngine,
-) -> Result<(), Box<dyn std::error::Error>> {
-
+async fn train_epoch(engine: &mut NdArrayEngine) -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open(TRAIN_PATH)?;
     let reader = BufReader::new(file);
 
-    let mut csv_reader = ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(reader);
+    let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
     let mut total_loss = 0.0;
     let mut total_correct = 0usize;
@@ -88,8 +82,7 @@ async fn train_epoch(
             .map(|v| v.parse::<u8>().unwrap())
             .collect();
 
-        let train_metrics=
-            engine.train_with_metrics(label, &pixels).await?;
+        let train_metrics = engine.train(label, &pixels)?;
 
         total_loss += train_metrics.loss;
         if train_metrics.correct {

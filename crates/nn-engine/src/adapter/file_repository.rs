@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use tokio::fs;
 
+use crate::domain::{ModelState, error::NNError};
 use crate::port::model_repository::ModelRepository;
-use crate::domain::{model_state::ModelState, error::NNError};
 
 pub struct FileModelRepository {
     path: String,
@@ -16,10 +16,8 @@ impl FileModelRepository {
 
 #[async_trait]
 impl ModelRepository for FileModelRepository {
-
     async fn save(&self, state: &ModelState) -> Result<(), NNError> {
-        let bytes = bincode::serialize(state)
-            .map_err(|_| NNError::PersistenceError)?;
+        let bytes = bincode::serialize(state).map_err(|_| NNError::PersistenceError)?;
 
         fs::write(&self.path, bytes)
             .await
@@ -31,11 +29,9 @@ impl ModelRepository for FileModelRepository {
             .await
             .map_err(|_| NNError::PersistenceError)?;
 
-        bincode::deserialize(&bytes)
-            .map_err(|_| NNError::PersistenceError)
+        bincode::deserialize(&bytes).map_err(|_| NNError::PersistenceError)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

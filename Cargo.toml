@@ -1,6 +1,8 @@
 [workspace]
-members = ["crates/app",
-    "crates/http-server", "crates/nn-engine",
+members = [
+    "crates/http-server",
+    "crates/nn-engine",
+    "crates/wasm-inference",
 ]
 
 resolver = "2"

@@ -1,8 +1,10 @@
-pub mod prediction;
+mod prediction;
+pub use prediction::Prediction;
 
 pub mod error;
 
-pub mod model_state;
+mod model_state;
+pub use model_state::ModelState;
 
 pub mod train;
-pub use train::TrainMetrics;
+pub use train::TrainingStepResult;

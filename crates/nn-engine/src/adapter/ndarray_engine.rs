@@ -1,21 +1,18 @@
-use crate::domain::TrainMetrics;
-use crate::domain::{prediction::Prediction, error::NNError};
-use crate::port::classifier::DigitClassifier;
-use crate::domain::model_state::ModelState;
+use crate::domain::TrainingStepResult;
+use crate::domain::{ModelState, Prediction, error::NNError};
+use crate::port::classifier::{
+    DigitPredictor, DigitTrainer, ModelStateExporter, ModelStateImporter,
+};
 
-use async_trait::async_trait;
 use ndarray::{Array1, Array2, Axis};
 use ndarray_rand::RandomExt;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use ndarray_rand::rand_distr::Normal;
 
-
 pub struct NdArrayEngine {
-    w1: Arc<RwLock<Array2<f32>>>,
-    b1: Arc<RwLock<Array1<f32>>>,
-    w2: Arc<RwLock<Array2<f32>>>,
-    b2: Arc<RwLock<Array1<f32>>>,
+    w1: Array2<f32>,
+    b1: Array1<f32>,
+    w2: Array2<f32>,
+    b2: Array1<f32>,
     lr: f32,
 }
 
@@ -25,48 +22,12 @@ impl NdArrayEngine {
         let he2 = (2.0f32 / 128.0).sqrt();
 
         Self {
-            w1: Arc::new(RwLock::new(
-                Array2::random((128, 784), Normal::new(0.0, he1).unwrap())
-            )),
-            b1: Arc::new(RwLock::new(Array1::zeros(128))),
-            w2: Arc::new(RwLock::new(
-                Array2::random((10, 128), Normal::new(0.0, he2).unwrap())
-            )),
-            b2: Arc::new(RwLock::new(Array1::zeros(10))),
+            w1: Array2::random((128, 784), Normal::new(0.0, he1).unwrap()),
+            b1: Array1::zeros(128),
+            w2: Array2::random((10, 128), Normal::new(0.0, he2).unwrap()),
+            b2: Array1::zeros(10),
             lr: 0.01,
         }
-    }
-
-    pub async fn export_state(&self) -> Result<ModelState, NNError> {
-        let w1 = self.w1.read().await;
-        let b1 = self.b1.read().await;
-        let w2 = self.w2.read().await;
-        let b2 = self.b2.read().await;
-
-        Ok(ModelState {
-            w1: w1.iter().cloned().collect(),
-            b1: b1.iter().cloned().collect(),
-            w2: w2.iter().cloned().collect(),
-            b2: b2.iter().cloned().collect(),
-        })
-    }
-
-    pub async fn import_state(&self, state: ModelState) -> Result<(), NNError> {
-        *self.w1.write().await =
-            Array2::from_shape_vec((128, 784), state.w1)
-                .map_err(|_| NNError::SerializationError)?;
-
-        *self.b1.write().await =
-            Array1::from_vec(state.b1);
-
-        *self.w2.write().await =
-            Array2::from_shape_vec((10, 128), state.w2)
-                .map_err(|_| NNError::SerializationError)?;
-
-        *self.b2.write().await =
-            Array1::from_vec(state.b2);
-
-        Ok(())
     }
 
     fn normalize(pixels: &[u8]) -> Result<Array1<f32>, NNError> {
@@ -98,20 +59,40 @@ impl NdArrayEngine {
         let p = output[label as usize].max(1e-7);
         -p.ln()
     }
+}
 
-    pub async fn train_with_metrics(&self, label: u8, pixels: &[u8]) -> Result<TrainMetrics, NNError> {
+impl DigitPredictor for NdArrayEngine {
+    fn predict(&self, pixels: &[u8]) -> Result<Prediction, NNError> {
         let input = Self::normalize(pixels)?;
 
-        let mut w1 = self.w1.write().await;
-        let mut b1 = self.b1.write().await;
-        let mut w2 = self.w2.write().await;
-        let mut b2 = self.b2.write().await;
-
-        // -------- Forward pass --------
-        let z1 = w1.dot(&input) + &*b1;
+        let z1 = self.w1.dot(&input) + &self.b1;
         let a1 = Self::relu(&z1);
 
-        let z2 = w2.dot(&a1) + &*b2;
+        let z2 = self.w2.dot(&a1) + &self.b2;
+        let output = Self::softmax(&z2);
+
+        let (digit, confidence) = output
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+
+        Ok(Prediction {
+            digit: digit as u8,
+            confidence: *confidence,
+        })
+    }
+}
+
+impl DigitTrainer for NdArrayEngine {
+    fn train(&mut self, label: u8, pixels: &[u8]) -> Result<TrainingStepResult, NNError> {
+        let input = Self::normalize(pixels)?;
+
+        // -------- Forward pass --------
+        let z1 = self.w1.dot(&input) + &self.b1;
+        let a1 = Self::relu(&z1);
+
+        let z2 = self.w2.dot(&a1) + &self.b2;
         let output = Self::softmax(&z2);
 
         // -------- Target vector --------
@@ -131,7 +112,7 @@ impl NdArrayEngine {
         let db2 = dz2.clone();
 
         // Hidden layer error
-        let da1 = w2.t().dot(&dz2);
+        let da1 = self.w2.t().dot(&dz2);
         let dz1 = da1 * Self::relu_derivative(&z1);
 
         let dw1 = dz1
@@ -143,12 +124,11 @@ impl NdArrayEngine {
 
         // -------- Gradient descent --------
 
-        *w2 -= &(dw2 * self.lr);
-        *b2 -= &(db2 * self.lr);
+        self.w2 -= &(dw2 * self.lr);
+        self.b2 -= &(db2 * self.lr);
 
-        *w1 -= &(dw1 * self.lr);
-        *b1 -= &(db1 * self.lr);
-
+        self.w1 -= &(dw1 * self.lr);
+        self.b1 -= &(db1 * self.lr);
 
         let loss = Self::cross_entropy(&output, label);
 
@@ -159,62 +139,54 @@ impl NdArrayEngine {
             .unwrap()
             .0 as u8;
 
-        let train_metrics = TrainMetrics {
-            loss, correct: predicted == label
+        let train_metrics = TrainingStepResult {
+            loss,
+            correct: predicted == label,
         };
 
         Ok(train_metrics)
     }
 }
 
-#[async_trait]
-impl DigitClassifier for NdArrayEngine {
-
-    async fn predict(&self, pixels: &[u8]) -> Result<Prediction, NNError> {
-        let input = Self::normalize(pixels)?;
-
-        let w1 = self.w1.read().await;
-        let b1 = self.b1.read().await;
-        let w2 = self.w2.read().await;
-        let b2 = self.b2.read().await;
-
-        let z1 = w1.dot(&input) + &*b1;
-        let a1 = Self::relu(&z1);
-
-        let z2 = w2.dot(&a1) + &*b2;
-        let output = Self::softmax(&z2);
-
-        let (digit, confidence) = output
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .unwrap();
-
-        Ok(Prediction {
-            digit: digit as u8,
-            confidence: *confidence,
+impl ModelStateExporter for NdArrayEngine {
+    fn export_state(&self) -> Result<ModelState, NNError> {
+        Ok(ModelState {
+            w1: self.w1.iter().cloned().collect(),
+            b1: self.b1.iter().cloned().collect(),
+            w2: self.w2.iter().cloned().collect(),
+            b2: self.b2.iter().cloned().collect(),
         })
     }
+}
 
-    async fn train(&self, label: u8, pixels: &[u8]) -> Result<(), NNError> {
-        self.train_with_metrics(label, pixels).await?;
+impl ModelStateImporter for NdArrayEngine {
+    fn import_state(&mut self, state: ModelState) -> Result<(), NNError> {
+        self.w1 = Array2::from_shape_vec((128, 784), state.w1)
+            .map_err(|_| NNError::SerializationError)?;
+
+        self.b1 = Array1::from_vec(state.b1);
+
+        self.w2 =
+            Array2::from_shape_vec((10, 128), state.w2).map_err(|_| NNError::SerializationError)?;
+
+        self.b2 = Array1::from_vec(state.b2);
+
         Ok(())
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*; 
+    use super::*;
 
     #[tokio::test]
     async fn test_train() {
-        let engine = NdArrayEngine::new();
+        let mut engine = NdArrayEngine::new();
         let pixels = vec![255u8; 784];
-        engine.train(9, &pixels).await.unwrap();
+        let _ = engine.train(9, &pixels).unwrap();
     }
 
-        fn sample_pixels() -> Vec<u8> {
+    fn sample_pixels() -> Vec<u8> {
         vec![255u8; 784]
     }
 
@@ -223,7 +195,7 @@ mod tests {
         let engine = NdArrayEngine::new();
         let pixels = vec![0u8; 784];
 
-        let result = engine.predict(&pixels).await.unwrap();
+        let result = engine.predict(&pixels).unwrap();
 
         assert!(result.digit <= 9);
         assert!(result.confidence >= 0.0);
@@ -231,14 +203,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_weights_change_after_training() {
-        let engine = NdArrayEngine::new();
+        let mut engine = NdArrayEngine::new();
         let pixels = sample_pixels();
 
-        let before = engine.export_state().await.unwrap();
+        let before = engine.export_state().unwrap();
 
-        engine.train(3, &pixels).await.unwrap();
+        let _ = engine.train(3, &pixels);
 
-        let after = engine.export_state().await.unwrap();
+        let after = engine.export_state().unwrap();
 
         assert_ne!(before.w1, after.w1);
         assert_ne!(before.w2, after.w2);
@@ -246,26 +218,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_loss_decreases_on_same_sample() {
-        let engine = NdArrayEngine::new();
+        let mut engine = NdArrayEngine::new();
         let pixels = sample_pixels();
 
-        let loss1 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
-        let loss2 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
-        let loss3 = engine.train_with_metrics(5, &pixels).await.unwrap().loss;
+        let loss1 = engine.train(5, &pixels).unwrap().loss;
+        let loss2 = engine.train(5, &pixels).unwrap().loss;
+        let loss3 = engine.train(5, &pixels).unwrap().loss;
 
         assert!(loss3 <= loss1 || loss3 <= loss2);
     }
 
     #[tokio::test]
     async fn test_model_can_overfit_single_sample() {
-        let engine = NdArrayEngine::new();
+        let mut engine = NdArrayEngine::new();
         let pixels = sample_pixels();
 
         for _ in 0..200 {
-            engine.train(7, &pixels).await.unwrap();
+            engine.train(7, &pixels).unwrap();
         }
 
-        let prediction = engine.predict(&pixels).await.unwrap();
+        let prediction = engine.predict(&pixels).unwrap();
 
         assert_eq!(prediction.digit, 7);
         assert!(prediction.confidence > 0.8);
@@ -273,18 +245,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_export_import_consistency() {
-        let engine = NdArrayEngine::new();
+        let mut engine = NdArrayEngine::new();
         let pixels = sample_pixels();
 
-        engine.train(2, &pixels).await.unwrap();
+        let _ = engine.train(2, &pixels);
 
-        let state = engine.export_state().await.unwrap();
+        let state = engine.export_state().unwrap();
 
-        let new_engine = NdArrayEngine::new();
-        new_engine.import_state(state).await.unwrap();
+        let mut new_engine = NdArrayEngine::new();
+        new_engine.import_state(state).unwrap();
 
-        let p1 = engine.predict(&pixels).await.unwrap();
-        let p2 = new_engine.predict(&pixels).await.unwrap();
+        let p1 = engine.predict(&pixels).unwrap();
+        let p2 = new_engine.predict(&pixels).unwrap();
 
         assert_eq!(p1.digit, p2.digit);
     }

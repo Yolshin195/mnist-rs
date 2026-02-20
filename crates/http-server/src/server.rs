@@ -1,10 +1,9 @@
 use crate::routes::router;
 
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::state::AppState;
-use app::DigitClassifierService;
 use std::sync::Arc;
-
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use nn_engine::application::digit_classifier_service::DigitClassifierService;
 
 pub async fn run() {
     tracing_subscriber::registry()
@@ -19,12 +18,15 @@ pub async fn run() {
         "{}/../../assets/models/default.bin",
         env!("CARGO_MANIFEST_DIR")
     );
-    let service = DigitClassifierService::new(model_path).await.expect("Error: DigitClassifierService new");
-    let state = AppState { classifier: Arc::new(service) };
+    let service = DigitClassifierService::from_path(model_path);
+    service.load_model().await.expect("Can't load model");
+
+    let state = AppState {
+        classifier: Arc::new(service),
+    };
 
     // build our application with some routes
-    let app = router()
-        .with_state(state);;
+    let app = router().with_state(state);
     // run it
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

@@ -6,8 +6,17 @@ use csv::ReaderBuilder;
 use tokio;
 
 use nn_engine::{
-    FileModelRepository, ModelRepository, NdArrayEngine,
-    port::classifier::{DigitTrainer, ModelStateExporter, ModelStateImporter},
+    FileModelRepository,
+    NdArrayEngine,
+    AsyncNdArrayEngine,
+    port::{
+        model_repository::ModelRepository,
+        async_classifier::{
+            AsyncModelStateExporter,
+            AsyncModelStateImporter,
+            AsyncDigitTrainer,
+        }
+    }
 };
 
 const TRAIN_PATH: &str = "assets/mnist/mnist_train.csv";
@@ -34,26 +43,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Training version: {}", version);
 
-    let mut engine = NdArrayEngine::new();
+    let engine = AsyncNdArrayEngine::new(NdArrayEngine::new());
     let repo = FileModelRepository::new(&model_path);
 
     // -------- Resume --------
     if resume {
         println!("📂 Loading existing model...");
         let state = repo.load().await?;
-        engine.import_state(state)?;
+        engine.import_state(state).await?;
         println!("✅ Model loaded");
     }
 
     // -------- Training --------
     for epoch in 0..EPOCHS {
         println!("\n📚 Epoch {}/{}", epoch + 1, EPOCHS);
-        train_epoch(&mut engine).await?;
+        train_epoch(&engine).await?;
     }
 
     // -------- Save --------
     println!("\n💾 Saving model...");
-    let state = engine.export_state()?;
+    let state = engine.export_state().await?;
     repo.save(&state).await?;
 
     println!("✅ Model saved to {}", model_path);
@@ -61,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn train_epoch(engine: &mut NdArrayEngine) -> Result<(), Box<dyn std::error::Error>> {
+async fn train_epoch(engine: &AsyncNdArrayEngine) -> Result<(), Box<dyn std::error::Error>> {
     let file = File::open(TRAIN_PATH)?;
     let reader = BufReader::new(file);
 
@@ -82,7 +91,7 @@ async fn train_epoch(engine: &mut NdArrayEngine) -> Result<(), Box<dyn std::erro
             .map(|v| v.parse::<u8>().unwrap())
             .collect();
 
-        let train_metrics = engine.train(label, &pixels)?;
+        let train_metrics = engine.train(label, &pixels).await?;
 
         total_loss += train_metrics.loss;
         if train_metrics.correct {

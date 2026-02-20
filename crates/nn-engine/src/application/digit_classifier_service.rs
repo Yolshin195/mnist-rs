@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use crate::NdArrayEngine;
+use crate::adapter::ndarray_engine::NdArrayEngine;
 use crate::adapter::async_ndarray_engine::AsyncNdArrayEngine;
 use crate::adapter::file_repository::FileModelRepository;
 use crate::domain::Prediction;
 use crate::domain::TrainingStepResult;
 use crate::domain::error::NNError;
-use crate::port::classifier::{
+use crate::port::async_classifier::{
     AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter,
 };
 use crate::port::model_repository::ModelRepository;

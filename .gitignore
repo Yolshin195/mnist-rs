@@ -28,3 +28,5 @@ target
 .vscode/
 
 /assets/mnist/*
+
+crates/wasm-inference/pkg/*

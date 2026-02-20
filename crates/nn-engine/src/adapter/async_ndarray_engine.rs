@@ -3,12 +3,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task;
 
-use crate::NdArrayEngine;
+use crate::adapter::ndarray_engine::NdArrayEngine;
 use crate::domain::TrainingStepResult;
 use crate::domain::{ModelState, Prediction, error::NNError};
 use crate::port::classifier::{
-    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter,
     DigitPredictor, DigitTrainer, ModelStateExporter, ModelStateImporter,
+};
+use crate::port::async_classifier::{
+    AsyncDigitPredictor, AsyncDigitTrainer, AsyncModelStateExporter, AsyncModelStateImporter,
 };
 
 pub struct AsyncNdArrayEngine {

@@ -1,5 +1,4 @@
-use crate::domain::TrainingStepResult;
-use crate::domain::{ModelState, Prediction, error::NNError};
+use crate::domain::{ModelState, Prediction, TrainingStepResult, error::NNError};
 use crate::port::classifier::{
     DigitPredictor, DigitTrainer, ModelStateExporter, ModelStateImporter,
 };

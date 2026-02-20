@@ -272,20 +272,23 @@
         ctx.strokeStyle = 'white';
 
         // События рисования
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        window.addEventListener('mouseup', stopDrawing);
-
-        function startDrawing(e) {
+        // Универсальные события (мышь + телефон + стилус)
+        canvas.addEventListener('pointerdown', (e) => {
             drawing = true;
+            canvas.setPointerCapture(e.pointerId);
             draw(e);
-        }
+        });
 
-        function stopDrawing() {
+        canvas.addEventListener('pointermove', draw);
+
+        window.addEventListener('pointerup', (e) => {
             drawing = false;
+            try {
+                canvas.releasePointerCapture(e.pointerId);
+            } catch {}
             ctx.beginPath();
             updatePreview();
-        }
+        });
 
         function draw(e) {
             if (!drawing) return;

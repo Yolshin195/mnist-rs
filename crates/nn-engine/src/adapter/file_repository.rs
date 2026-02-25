@@ -33,6 +33,37 @@ impl ModelRepository for FileModelRepository {
     }
 }
 
+
+pub struct JsonModelRepository {
+    path: String,
+}
+
+impl JsonModelRepository {
+    pub fn new(path: impl Into<String>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+#[async_trait]
+impl ModelRepository for JsonModelRepository {
+    async fn save(&self, state: &ModelState) -> Result<(), NNError> {
+        let json = serde_json::to_string(state).map_err(|_| NNError::PersistenceError)?;
+
+        fs::write(&self.path, json)
+            .await
+            .map_err(|_| NNError::PersistenceError)
+    }
+
+    async fn load(&self) -> Result<ModelState, NNError> {
+        let json = fs::read_to_string(&self.path)
+            .await
+            .map_err(|_| NNError::PersistenceError)?;
+
+        serde_json::from_str(&json.as_str()).map_err(|_| NNError::PersistenceError)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

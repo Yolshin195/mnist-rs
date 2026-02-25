@@ -261,6 +261,26 @@
         </div>
 
         <div class="info-section">
+
+            <div style="margin-bottom:20px;">
+                <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">
+                    Модель
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button id="btn-trained"
+                            class="primary-btn"
+                            onclick="switchModel('trained')">
+                        Обученная
+                    </button>
+
+                    <button id="btn-empty"
+                            class="secondary-btn"
+                            onclick="switchModel('empty')">
+                        Пустая
+                    </button>
+                </div>
+            </div>
+
             <div class="prediction-display">
                 <canvas id="previewCanvas" width="28" height="28" class="preview-28"></canvas>
                 <div style="font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Результат</div>
@@ -286,7 +306,6 @@
                 <button class="digit-btn" onclick="training(9)">9</button>
             </div>
         </div>
-
             <div style="margin-top: 20px;">
                 <div style="font-size: 12px; display: flex; align-items: center; color: var(--text-dim);">
                     <span class="status-dot"></span> 
@@ -297,7 +316,7 @@
     </div>
 
     <script type="module">
-        import init, { predict, train } from "./pkg/wasm_inference.js";
+        import init, { predict, train, create_empty_model, create_model_from_state } from "./pkg/wasm_inference.js";
 
         let wasmReady = false;
 
@@ -305,6 +324,12 @@
             await init();
             wasmReady = true;
             console.log("WASM loaded 🚀");
+        }
+
+        async function loadWeights() {
+            const response = await fetch("./model.json");
+            const json = await response.json();
+            await create_model_from_state(json);
         }
 
         window.predictWasm = async function(data) {
@@ -327,7 +352,51 @@
             return result;
         };
 
-        initWasm();
+        window.switchModel = async function(type) {
+            const app = document.getElementById('main-app');
+            const btnTrained = document.getElementById('btn-trained');
+            const btnEmpty = document.getElementById('btn-empty');
+
+            app.classList.add('loading');
+
+            try {
+                if (type === 'empty') {
+                    create_empty_model();
+
+                    btnEmpty.classList.remove('secondary-btn');
+                    btnEmpty.classList.add('primary-btn');
+
+                    btnTrained.classList.remove('primary-btn');
+                    btnTrained.classList.add('secondary-btn');
+
+                    console.log("Switched to EMPTY model");
+                }
+
+                if (type === 'trained') {
+                    const response = await fetch("./model.json");
+                    const json = await response.json();
+                    await create_model_from_state(json);
+
+                    btnTrained.classList.remove('secondary-btn');
+                    btnTrained.classList.add('primary-btn');
+
+                    btnEmpty.classList.remove('primary-btn');
+                    btnEmpty.classList.add('secondary-btn');
+
+                    console.log("Switched to TRAINED model");
+                }
+
+                await window.predict();
+
+            } catch (err) {
+                console.error(err);
+            }
+
+            app.classList.remove('loading');
+        };
+
+        await initWasm();
+        await loadWeights();
     </script>
 
     <script>

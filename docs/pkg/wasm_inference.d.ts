@@ -1,6 +1,10 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export function create_empty_model(): void;
+
+export function create_model_from_state(state: any): void;
+
 export function init(): void;
 
 export function predict(pixels: Uint8Array): any;
@@ -11,6 +15,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly create_empty_model: () => void;
+    readonly create_model_from_state: (a: any) => [number, number];
     readonly init: () => void;
     readonly predict: (a: number, b: number) => any;
     readonly train: (a: number, b: number, c: number) => any;
@@ -20,6 +26,7 @@ export interface InitOutput {
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

@@ -1,6 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const create_empty_model: () => void;
+export const create_model_from_state: (a: any) => [number, number];
 export const init: () => void;
 export const predict: (a: number, b: number) => any;
 export const train: (a: number, b: number, c: number) => any;
@@ -10,4 +12,5 @@ export const __wbindgen_exn_store: (a: number) => void;
 export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;
